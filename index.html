@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1c2e">
+<title>أرقام — لعبة المطابقة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="أرقام">
+<meta name="description" content="لعبة مطابقة أرقام: اشطب الأرقام المتساوية أو التي مجموعها 10.">
+<style>
+  :root{
+    --bg:#0f1c2e; --panel:#ffffff; --ink:#16253a; --ghost:#c8d4e0; --line:#e6ecf3;
+    --gold:#f5a524; --gold-dark:#d98b0d; --mint:#17c3a2; --sky:#3d9be9; --rose:#e8618c;
+    --shadow:0 10px 30px rgba(10,25,45,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;font-family:'Cairo',system-ui,'Segoe UI',sans-serif;
+    background:radial-gradient(120% 80% at 50% 0%, #1d3352 0%, var(--bg) 60%);
+    color:#fff;display:flex;justify-content:center;overflow:hidden;
+  }
+  .app{
+    width:100%;max-width:480px;height:100dvh;display:flex;flex-direction:column;
+    padding:calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 8px);
+    gap:8px;
+  }
+
+  .chips{display:flex;gap:8px;align-items:center}
+  .chip{
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);
+    border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800;
+    color:#fff;font-family:inherit;cursor:pointer;
+  }
+  .chip.level{background:var(--gold);border-color:var(--gold-dark);color:#3a2a05}
+  .chip.static{cursor:default;opacity:.85;font-weight:600}
+  .chips .spacer{flex:1}
+
+  .topbar{display:flex;gap:8px}
+  .stat{
+    flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+    border-radius:14px;padding:7px 4px;text-align:center;
+  }
+  .stat span{display:block;font-size:10px;font-weight:600;opacity:.7}
+  .stat b{display:block;font-size:19px;font-weight:800;line-height:1.25}
+  .stat.lvbest b{color:var(--mint)}
+  .stat.alltime b{color:var(--sky)}
+
+  .board-wrap{
+    flex:1;min-height:0;background:var(--panel);border-radius:20px;
+    box-shadow:var(--shadow);overflow-y:auto;overscroll-behavior:contain;padding:6px;
+  }
+  .board{direction:ltr;display:grid;grid-template-columns:repeat(9,1fr);gap:2px}
+  .cell{
+    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--line);border-radius:6px;background:#fff;
+    font-size:clamp(14px,4.6vw,24px);font-weight:600;color:var(--ink);
+    cursor:pointer;user-select:none;
+    transition:transform .12s ease, background .15s ease, color .15s ease;
+  }
+  .cell.cleared{color:var(--ghost);border-color:#f2f6fa;cursor:default;background:#fcfdfe}
+  .cell.sel{background:var(--gold);color:#fff;border-color:var(--gold-dark);transform:scale(1.06)}
+  .cell.hit{animation:pop .32s ease}
+  .cell.bad{animation:shake .3s ease}
+  .cell.tip{animation:glow 1s ease infinite}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.25);background:var(--mint);color:#fff}100%{transform:scale(1)}}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+  @keyframes glow{
+    0%,100%{background:#fff;color:var(--ink);border-color:var(--line)}
+    50%{background:var(--sky);color:#fff;border-color:#2b7fc4;transform:scale(1.08)}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .cell.tip{animation:none;background:var(--sky);color:#fff;border-color:#2b7fc4}
+    .cell.hit,.cell.bad{animation:none}
+  }
+
+  .actions{display:flex;gap:8px}
+  .btn{
+    flex:1;border:0;border-radius:16px;padding:12px 6px;font-family:inherit;
+    font-size:14px;font-weight:800;color:#3a2a05;background:var(--gold);
+    box-shadow:0 4px 0 var(--gold-dark);cursor:pointer;transition:transform .1s ease;
+  }
+  .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--gold-dark)}
+  .btn.ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:none;border:1px solid rgba(255,255,255,.18)}
+  .btn.tipbtn{background:var(--sky);color:#fff;box-shadow:0 4px 0 #2b7fc4}
+  .btn.tipbtn:active{box-shadow:0 1px 0 #2b7fc4}
+  .btn:disabled{opacity:.4;cursor:default;transform:none}
+  .btn .count{font-weight:600;opacity:.85;font-size:13px}
+
+  .hintline{text-align:center;font-size:13px;font-weight:600;min-height:20px;color:#9fb3c8}
+  .hintline.warn{color:var(--rose)}
+
+  .modal{
+    position:fixed;inset:0;background:rgba(8,16,28,.78);backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;padding:22px;z-index:10;
+  }
+  .modal.show{display:flex}
+  .card{
+    background:#fff;color:var(--ink);border-radius:22px;padding:22px 18px;
+    width:100%;max-width:320px;text-align:center;box-shadow:var(--shadow);
+  }
+  .card h2{margin:0 0 14px;font-size:21px;font-weight:800}
+  .card p{margin:0 0 16px;font-size:14px;color:#5d7186}
+  .mbtns{display:flex;flex-direction:column;gap:9px}
+  .mbtns .btn{width:100%;flex:none}
+  .lvbtn{
+    width:100%;border:0;border-radius:16px;padding:14px;font-family:inherit;
+    font-size:18px;font-weight:800;color:#fff;cursor:pointer;transition:transform .1s ease;
+  }
+  .lvbtn:active{transform:scale(.98)}
+  .lv-easy{background:#17c3a2}
+  .lv-med{background:#3d9be9}
+  .lv-hard{background:#e8618c}
+  .lvbtn.cur{outline:3px solid var(--ink);outline-offset:2px}
+  .link{background:none;border:0;color:#5d7186;font-family:inherit;font-size:13px;
+    font-weight:700;cursor:pointer;padding:6px;text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="chips">
+    <button class="chip level" id="chipLevel">المستوى: سهل</button>
+    <span class="chip static" id="chipStage">المرحلة 1</span>
+    <span class="spacer"></span>
+  </div>
+
+  <div class="topbar">
+    <div class="stat"><span>النقاط</span><b id="score">0</b></div>
+    <div class="stat lvbest"><span>أفضل هذا المستوى</span><b id="lvBest">0</b></div>
+    <div class="stat alltime"><span>الأفضل العام</span><b id="allBest">0</b></div>
+  </div>
+
+  <div class="board-wrap" id="boardWrap">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="hintline" id="msg"></div>
+
+  <div class="actions">
+    <button class="btn ghost" id="btnNew">لعبة جديدة</button>
+    <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
+    <button class="btn" id="btnAdd">إضافة أرقام</button>
+  </div>
+
+</div>
+
+<div class="modal" id="modal">
+  <div class="card">
+    <h2 id="mTitle"></h2>
+    <p id="mText"></p>
+    <div class="mbtns" id="mBtns"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const COLS       = 9;
+  const START_ROWS = 3;
+  const MAX_ROWS     = 12;  // سعة اللوح القصوى
+  const ROWS_PER_ADD = 3;   // صفوف تُضاف في كل ضغطة
+  const MAX_HINTS  = 3;   // تلميحات مجانية
+  const HINT_COST  = 20;  // كلفة التلميح بعد نفادها
+
+  const LEVELS = {
+    easy:   { name:"سهل",   cls:"lv-easy" },
+    medium: { name:"متوسط", cls:"lv-med"  },
+    hard:   { name:"صعب",   cls:"lv-hard" }
+  };
+  const ORDER = ["easy","medium","hard"];
+
+  // ---- تخزين آمن ----
+  const mem = {};
+  const store = {
+    get(k){ try{ return localStorage.getItem(k); }catch(e){ return mem[k] ?? null; } },
+    set(k,v){ try{ localStorage.setItem(k,v); }catch(e){ mem[k]=v; } },
+    del(k){ try{ localStorage.removeItem(k); }catch(e){ delete mem[k]; } }
+  };
+  const saveKey = lv => "arqam.save." + lv;
+  const bestKey = lv => "arqam.best." + lv;
+
+  let LV = "easy", S = null, sel = -1, locked = false;
+  let tipPair = null, tipT, msgT;
+
+  const $ = id => document.getElementById(id);
+  const boardEl = $("board");
+  const cfg = () => LEVELS[LV];
+
+  // ---------- توليد جدول حسب صعوبة المستوى ----------
+  const good = (a,b) => a===b || a+b===10;
+
+  // عدد الأزواج القابلة للمطابقة والمتجاورة في جدول ممتلئ
+  function openPairs(arr){
+    let n = 0;
+    for(let i=0;i<arr.length;i++){
+      const col = i % COLS;
+      const cand = [i+1, i+COLS];                 // التالي مباشرة، وتحته
+      if(col > 0)        cand.push(i+COLS-1);     // قطري
+      if(col < COLS-1)   cand.push(i+COLS+1);     // قطري
+      for(const j of cand){
+        if(j < arr.length && good(arr[i], arr[j])) n++;
+      }
+    }
+    return n;
+  }
+
+  // تنوّع الأرقام: يمنع الجداول التي تتكوّن من رقمين متكاملين
+  function varied(arr){
+    const f = {};
+    arr.forEach(v => f[v] = (f[v]||0) + 1);
+    const distinct = Object.keys(f).length;
+    let max = 0;
+    for(const k in f) if(f[k] > max) max = f[k];
+    return distinct >= 7 && max <= Math.ceil(arr.length * 0.25);
+  }
+
+  function genCells(rows){
+    const n = rows * COLS, tries = [];
+    for(let t=0;t<400;t++){
+      const arr = [];
+      for(let i=0;i<n;i++) arr.push(1 + Math.floor(Math.random()*9));
+      if(!varied(arr)) continue;
+      tries.push({ arr, c: openPairs(arr) });
+    }
+    if(tries.length === 0){                               // احتياط نادر
+      const arr = [];
+      for(let i=0;i<n;i++) arr.push(1 + Math.floor(Math.random()*9));
+      return arr.map(v => ({ v, cleared:false }));
+    }
+    tries.sort((a,b)=> a.c - b.c);
+
+    let pick;
+    if(LV === "easy"){
+      pick = tries[tries.length-1];                       // أكثر الحلول ظهورًا
+    }else if(LV === "medium"){
+      pick = tries[Math.floor(tries.length/2)];           // الوسط
+    }else{
+      const ok = tries.filter(t => t.c >= 3);             // الأقل حلولًا مع ضمان اللعب
+      pick = ok.length ? ok[0] : tries[tries.length-1];
+    }
+    return pick.arr.map(v => ({ v, cleared:false }));
+  }
+
+  // ---------- لعبة ----------
+  function newGame(stage, fresh){
+    const keepHints = (!fresh && S && typeof S.hintsLeft==="number") ? S.hintsLeft : MAX_HINTS;
+    const keepScore = (!fresh && S) ? S.score : 0;
+    const rows = START_ROWS + Math.min(2, (stage||1) - 1);
+    S = { level:LV, stage: stage||1, score:keepScore,
+          hintsLeft:keepHints, cells: genCells(rows) };
+    sel = -1; clearTip();
+    save(); render(); say("");
+  }
+
+  // ---------- منطق المطابقة ----------
+  function pathClear(i,j){
+    if(i>j){ const t=i; i=j; j=t; }
+    const c = S.cells;
+
+    let ok = true;                                   // ترتيب القراءة
+    for(let k=i+1;k<j;k++) if(!c[k].cleared){ ok=false; break; }
+    if(ok) return true;
+
+    const r1=Math.floor(i/COLS), c1=i%COLS;
+    const r2=Math.floor(j/COLS), c2=j%COLS;
+
+    if(c1===c2){                                     // نفس العمود
+      ok = true;
+      for(let r=r1+1;r<r2;r++){ const k=r*COLS+c1; if(c[k] && !c[k].cleared){ ok=false; break; } }
+      if(ok) return true;
+    }
+
+    const dr = r2-r1, dc = c2-c1;                    // قطري
+    if(dr>0 && Math.abs(dc)===dr){
+      const step = dc>0 ? 1 : -1;
+      ok = true;
+      for(let s=1;s<dr;s++){
+        const k=(r1+s)*COLS + (c1 + s*step);
+        if(c[k] && !c[k].cleared){ ok=false; break; }
+      }
+      if(ok) return true;
+    }
+    return false;
+  }
+
+  function canMatch(i,j){
+    const c = S.cells;
+    if(i===j || i<0 || j<0 || !c[i] || !c[j]) return false;
+    if(c[i].cleared || c[j].cleared) return false;
+    return good(c[i].v, c[j].v) && pathClear(i,j);
+  }
+
+  function findPair(){
+    const idx = [];
+    S.cells.forEach((c,i)=>{ if(!c.cleared) idx.push(i); });
+    for(let a=0;a<idx.length;a++)
+      for(let b=a+1;b<idx.length;b++)
+        if(canMatch(idx[a], idx[b])) return [idx[a], idx[b]];
+    return null;
+  }
+  const anyMoveLeft = () => findPair() !== null;
+
+  // ---------- التلميح ----------
+  function useHint(){
+    if(locked) return;
+    const p = findPair();
+    if(!p){
+      if(canAdd()) return say("لا توجد حركات — اضغط إضافة أرقام", true);
+      return gameOver();
+    }
+
+    let note;
+    if(S.hintsLeft > 0){
+      S.hintsLeft--;
+      note = "زوج متاح — بقي " + S.hintsLeft + " تلميح مجاني";
+    }else{
+      S.score = Math.max(0, S.score - HINT_COST);
+      note = "زوج متاح — خُصمت " + HINT_COST + " نقطة";
+    }
+    sel = -1; tipPair = p;
+    save(); render();
+    say(note);
+    clearTimeout(tipT);
+    tipT = setTimeout(()=>{ clearTip(); render(); }, 4000);
+  }
+  function clearTip(){ tipPair=null; clearTimeout(tipT); }
+
+  // ---------- الصفوف ----------
+  function dropEmptyRows(){
+    const rows = [];
+    for(let i=0;i<S.cells.length;i+=COLS) rows.push(S.cells.slice(i,i+COLS));
+    const kept = rows.filter(r=>r.some(c=>!c.cleared));
+    const removed = rows.length - kept.length;
+    if(removed>0){
+      S.cells = [].concat.apply([], kept);
+      S.score += removed * 30;
+    }
+    return removed;
+  }
+
+  // ---------- إضافة ----------
+  const freeCells = () => MAX_ROWS*COLS - S.cells.length;
+  const canAdd    = () => freeCells() >= COLS;
+
+  function addNumbers(){
+    if(!canAdd()) return say("امتلأ اللوح — لا مجال لإضافة أرقام", true);
+    const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
+    clearTip();
+    S.cells = S.cells.concat(genCells(rows));             // أرقام جديدة بصعوبة المستوى
+    save(); render();
+    const left = Math.floor(freeCells()/COLS);
+    say("أُضيفت " + rows + " صفوف — بقي مجال لـ " + left + " صفوف");
+    $("boardWrap").scrollTop = $("boardWrap").scrollHeight;
+    checkEnd();
+  }
+
+  // ---------- النقر ----------
+  function onTap(i){
+    if(locked) return;
+    const c = S.cells[i];
+    if(!c || c.cleared) return;
+    clearTip();
+
+    if(sel===-1){ sel=i; render(); return; }
+    if(sel===i){ sel=-1; render(); return; }
+
+    if(canMatch(sel,i)){
+      const a=sel, b=i;
+      S.cells[a].cleared = true;
+      S.cells[b].cleared = true;
+      S.score += 10;
+      sel = -1; locked = true;
+      render([a,b],"hit");
+      setTimeout(()=>{
+        dropEmptyRows(); locked = false;
+        save(); render(); checkEnd();
+      },300);
+    }else{
+      const bad = sel; sel = i;
+      render([bad],"bad");
+      say("هذان الرقمان لا يتطابقان", true);
+    }
+  }
+
+  // ---------- النهاية ----------
+  function checkEnd(){
+    const left = S.cells.filter(c=>!c.cleared).length;
+    if(left===0){
+      S.score += 100; saveBest();
+      modal("فزت!", "أفرغت اللوح بالكامل. النقاط: " + S.score, [
+        {label:"المرحلة التالية", fn:()=>{ hide(); newGame(S.stage+1,false); }},
+        {label:"تغيير المستوى", cls:"link", fn:levelPicker}
+      ]);
+      return;
+    }
+    if(!anyMoveLeft()){
+      if(canAdd()){
+        say("لا توجد حركات — اضغط إضافة أرقام", true);
+      }else{
+        gameOver();
+      }
+    }
+  }
+
+  function gameOver(){
+    saveBest();
+    store.del(saveKey(LV));
+    modal("انتهت اللعبة", "امتلأ اللوح ولا توجد حركات. نقاطك: " + S.score, [
+      {label:"لعبة جديدة", fn:()=>{ hide(); newGame(1,true); }},
+      {label:"تغيير المستوى", cls:"link", fn:levelPicker}
+    ]);
+  }
+
+  // ---------- النتائج ----------
+  const bestOf = lv => parseInt(store.get(bestKey(lv)) || "0", 10);
+  const allTimeBest = () => Math.max.apply(null, ORDER.map(bestOf));
+  function saveBest(){ if(S.score > bestOf(LV)) store.set(bestKey(LV), String(S.score)); }
+
+  // ---------- العرض ----------
+  function render(flash, cls){
+    boardEl.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    S.cells.forEach((c,i)=>{
+      const d = document.createElement("div");
+      d.className = "cell" + (c.cleared?" cleared":"") + (i===sel?" sel":"");
+      if(tipPair && tipPair.indexOf(i)>-1) d.classList.add("tip");
+      if(flash && flash.indexOf(i)>-1) d.classList.add(cls);
+      d.textContent = c.v;
+      d.dataset.i = i;
+      frag.appendChild(d);
+    });
+    boardEl.appendChild(frag);
+
+    $("chipLevel").textContent = "المستوى: " + cfg().name;
+    $("chipStage").textContent = "المرحلة " + S.stage;
+    $("score").textContent   = S.score;
+    $("lvBest").textContent  = bestOf(LV);
+    $("allBest").textContent = allTimeBest();
+    $("hintsLeft").textContent = S.hintsLeft > 0
+      ? "(" + S.hintsLeft + ")"
+      : "(−" + HINT_COST + ")";
+    $("btnAdd").disabled  = !canAdd();
+    $("btnHint").disabled = false;
+
+    if(!anyMoveLeft() && canAdd()) say("لا توجد حركات — اضغط إضافة أرقام", true);
+  }
+
+  function say(t, warn){
+    const el = $("msg");
+    el.textContent = t;
+    el.className = "hintline" + (warn?" warn":"");
+    clearTimeout(msgT);
+    if(t) msgT = setTimeout(()=>{ el.textContent=""; }, 2600);
+  }
+
+  // ---------- النافذة ----------
+  function modal(title, text, buttons, dismissible){
+    $("mTitle").textContent = title;
+    $("mText").textContent = text || "";
+    $("mText").style.display = text ? "" : "none";
+    const box = $("mBtns");
+    box.innerHTML = "";
+    buttons.forEach(b=>{
+      if(b.html){ box.appendChild(b.html); return; }
+      const el = document.createElement("button");
+      el.className = b.cls === "link" ? "link" : "btn";
+      el.textContent = b.label;
+      el.onclick = b.fn;
+      box.appendChild(el);
+    });
+    $("modal").dataset.dismissible = dismissible ? "1" : "0";
+    $("modal").classList.add("show");
+  }
+  function hide(){ $("modal").classList.remove("show"); }
+
+  // ---------- اختيار المستوى ----------
+  function levelPicker(){
+    const btns = ORDER.map(k=>{
+      const el = document.createElement("button");
+      el.className = "lvbtn " + LEVELS[k].cls + (k===LV ? " cur" : "");
+      el.textContent = LEVELS[k].name;
+      el.onclick = ()=> chooseLevel(k);
+      return { html: el };
+    });
+    modal("اختر المستوى", "", btns, S !== null);
+  }
+
+  function chooseLevel(k){
+    if(S && k===LV){ hide(); return; }
+    if(S) saveBest();
+    LV = k;
+    store.set("arqam.level", k);
+    hide();
+    if(!loadLevel(k)) newGame(1, true);
+  }
+
+  // ---------- الحفظ ----------
+  function save(){ store.set(saveKey(LV), JSON.stringify(S)); }
+
+  function loadLevel(lv){
+    try{
+      const raw = store.get(saveKey(lv));
+      if(!raw) return false;
+      const d = JSON.parse(raw);
+      if(!d || !Array.isArray(d.cells) || d.cells.length===0) return false;
+      if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
+      delete d.addsLeft;
+      LV = lv; S = d; sel = -1; clearTip(); render();
+      if(!anyMoveLeft() && !canAdd()) gameOver();
+      return true;
+    }catch(e){ return false; }
+  }
+
+  // ---------- الربط ----------
+  boardEl.addEventListener("click", e=>{
+    const t = e.target.closest(".cell");
+    if(t) onTap(parseInt(t.dataset.i,10));
+  });
+  $("btnAdd").addEventListener("click", addNumbers);
+  $("btnHint").addEventListener("click", useHint);
+  $("chipLevel").addEventListener("click", levelPicker);
+  $("btnNew").addEventListener("click", ()=>{
+    modal("لعبة جديدة؟", "ستُحفظ نقاطك الحالية (" + S.score + ") إن كانت الأفضل، ثم يبدأ جدول جديد.", [
+      {label:"ابدأ من جديد", fn:()=>{ hide(); saveBest(); newGame(1,true); }},
+      {label:"إلغاء", cls:"link", fn:hide}
+    ], true);
+  });
+  $("modal").addEventListener("click", e=>{
+    if(e.target.id==="modal" && $("modal").dataset.dismissible==="1") hide();
+  });
+
+  // ---------- البدء ----------
+  (function start(){
+    const last = store.get("arqam.level");
+    if(last && LEVELS[last] && loadLevel(last)) return;
+    LV = "easy";
+    S = { level:"easy", stage:1, score:0,
+          hintsLeft:MAX_HINTS, cells: genCells(START_ROWS) };
+    render();
+    S = null;                 // لا تُحفظ لعبة قبل اختيار المستوى
+    levelPicker();
+  })();
+
+})();
+</script>
+
+<script>
+  // تسجيل عامل الخدمة — يتيح العمل دون إنترنت والتثبيت على الشاشة الرئيسية
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", ()=>{
+      navigator.serviceWorker.register("./sw.js").catch(()=>{});
+    });
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      if(reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+  }
+</script>
+</body>
+</html>
