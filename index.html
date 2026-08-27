@@ -166,9 +166,10 @@
   "use strict";
 
   const COLS       = 9;
-  const START_ROWS = 3;
+  const START_ROWS   = 4;   // زوجي دائمًا: كل حركة تحذف رقمين
   const MAX_ROWS     = 12;  // سعة اللوح القصوى
-  const ROWS_PER_ADD = 3;   // صفوف تُضاف في كل ضغطة
+  const ROWS_PER_ADD = 2;   // صفوف تُضاف في كل ضغطة (زوجي)
+  const SAVE_VER     = 2;   // نسخة الحفظ — تُهمل الألواح القديمة الفردية
   const MAX_HINTS  = 3;   // تلميحات مجانية
   const HINT_COST  = 20;  // كلفة التلميح بعد نفادها
 
@@ -224,19 +225,40 @@
     return distinct >= 7 && max <= Math.ceil(arr.length * 0.25);
   }
 
+  // مجموعات التطابق: أي رقمين من المجموعة نفسها يُشطبان
+  const GROUPS = [[1,9],[2,8],[3,7],[4,6],[5]];
+  const GW     = [2,2,2,2,1];
+  const GW_SUM = 9;
+
+  function pickGroup(){
+    let r = Math.random() * GW_SUM;
+    for(let i=0;i<GROUPS.length;i++){ r -= GW[i]; if(r < 0) return GROUPS[i]; }
+    return GROUPS[0];
+  }
+
+  // لوح قابل للإفراغ حسابيًا: يُبنى أزواجًا من المجموعة نفسها ثم يُخلط
+  function randArr(n){
+    const a = [];
+    for(let k=0;k<n/2;k++){
+      const g = pickGroup();
+      a.push(g[Math.floor(Math.random()*g.length)]);
+      a.push(g[Math.floor(Math.random()*g.length)]);
+    }
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
   function genCells(rows){
-    const n = rows * COLS, tries = [];
+    const n = (rows * COLS) - ((rows * COLS) % 2), tries = [];
     for(let t=0;t<400;t++){
-      const arr = [];
-      for(let i=0;i<n;i++) arr.push(1 + Math.floor(Math.random()*9));
+      const arr = randArr(n);
       if(!varied(arr)) continue;
       tries.push({ arr, c: openPairs(arr) });
     }
-    if(tries.length === 0){                               // احتياط نادر
-      const arr = [];
-      for(let i=0;i<n;i++) arr.push(1 + Math.floor(Math.random()*9));
-      return arr.map(v => ({ v, cleared:false }));
-    }
+    if(tries.length === 0) return randArr(n).map(v => ({ v, cleared:false }));
     tries.sort((a,b)=> a.c - b.c);
 
     let pick;
@@ -255,8 +277,8 @@
   function newGame(stage, fresh){
     const keepHints = (!fresh && S && typeof S.hintsLeft==="number") ? S.hintsLeft : MAX_HINTS;
     const keepScore = (!fresh && S) ? S.score : 0;
-    const rows = START_ROWS + Math.min(2, (stage||1) - 1);
-    S = { level:LV, stage: stage||1, score:keepScore,
+    const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
+    S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
           hintsLeft:keepHints, cells: genCells(rows) };
     sel = -1; clearTip();
     save(); render(); say("");
@@ -513,6 +535,7 @@
       if(!raw) return false;
       const d = JSON.parse(raw);
       if(!d || !Array.isArray(d.cells) || d.cells.length===0) return false;
+      if(d.ver !== SAVE_VER) return false;   // لوح قديم غير قابل للإفراغ
       if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
       delete d.addsLeft;
       LV = lv; S = d; sel = -1; clearTip(); render();
