@@ -1,5 +1,5 @@
 // عامل الخدمة — غيّر رقم النسخة عند كل تحديث للّعبة
-const VERSION = "arqam-v2";
+const VERSION = "arqam-v3";
 const ASSETS = [
   "./",
   "./index.html",
