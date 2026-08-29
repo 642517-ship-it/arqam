@@ -275,11 +275,10 @@
 
   // ---------- لعبة ----------
   function newGame(stage, fresh){
-    const keepHints = (!fresh && S && typeof S.hintsLeft==="number") ? S.hintsLeft : MAX_HINTS;
-    const keepScore = (!fresh && S) ? S.score : 0;
+    const keepScore = (!fresh && S) ? S.score : 0;   // النقاط تتراكم، التلميحات تتجدّد
     const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
     S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
-          hintsLeft:keepHints, cells: genCells(rows) };
+          hintsLeft:MAX_HINTS, cells: genCells(rows) };
     sel = -1; clearTip();
     save(); render(); say("");
   }
