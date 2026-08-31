@@ -131,6 +131,7 @@
     <button class="chip level" id="chipLevel">المستوى: سهل</button>
     <span class="chip static" id="chipStage">المرحلة 1</span>
     <span class="spacer"></span>
+    <button class="chip" id="btnNew">لعبة جديدة</button>
   </div>
 
   <div class="topbar">
@@ -146,7 +147,7 @@
   <div class="hintline" id="msg"></div>
 
   <div class="actions">
-    <button class="btn ghost" id="btnNew">لعبة جديدة</button>
+    <button class="btn ghost" id="btnUndo">تراجع</button>
     <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
     <button class="btn" id="btnAdd">إضافة أرقام</button>
   </div>
@@ -278,7 +279,7 @@
     const keepScore = (!fresh && S) ? S.score : 0;   // النقاط تتراكم، التلميحات تتجدّد
     const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
     S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
-          hintsLeft:MAX_HINTS, cells: genCells(rows) };
+          hintsLeft:MAX_HINTS, undo:null, cells: genCells(rows) };
     sel = -1; clearTip();
     save(); render(); say("");
   }
@@ -377,12 +378,28 @@
     if(!canAdd()) return say("امتلأ اللوح — لا مجال لإضافة أرقام", true);
     const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
     clearTip();
+    S.undo = null;                         // التراجع يعمل على آخر مطابقة فقط
     S.cells = S.cells.concat(genCells(rows));             // أرقام جديدة بصعوبة المستوى
     save(); render();
     const left = Math.floor(freeCells()/COLS);
     say("أُضيفت " + rows + " صفوف — بقي مجال لـ " + left + " صفوف");
     $("boardWrap").scrollTop = $("boardWrap").scrollHeight;
     checkEnd();
+  }
+
+  // ---------- التراجع ----------
+  function snapshot(){
+    return { score: S.score, cells: S.cells.map(c => ({ v:c.v, cleared:c.cleared })) };
+  }
+
+  function undoMove(){
+    if(locked || !S.undo) return;
+    S.cells = S.undo.cells.map(c => ({ v:c.v, cleared:c.cleared }));
+    S.score = S.undo.score;
+    S.undo  = null;
+    sel = -1; clearTip();
+    save(); render();
+    say("تراجعت عن آخر مطابقة");
   }
 
   // ---------- النقر ----------
@@ -397,6 +414,7 @@
 
     if(canMatch(sel,i)){
       const a=sel, b=i;
+      S.undo = snapshot();                 // لقطة قبل المطابقة للتراجع عنها
       S.cells[a].cleared = true;
       S.cells[b].cleared = true;
       S.score += 10;
@@ -472,6 +490,7 @@
       : "(−" + HINT_COST + ")";
     $("btnAdd").disabled  = !canAdd();
     $("btnHint").disabled = false;
+    $("btnUndo").disabled = !S.undo;
 
     if(!anyMoveLeft() && canAdd()) say("لا توجد حركات — اضغط إضافة أرقام", true);
   }
@@ -549,6 +568,7 @@
     if(t) onTap(parseInt(t.dataset.i,10));
   });
   $("btnAdd").addEventListener("click", addNumbers);
+  $("btnUndo").addEventListener("click", undoMove);
   $("btnHint").addEventListener("click", useHint);
   $("chipLevel").addEventListener("click", levelPicker);
   $("btnNew").addEventListener("click", ()=>{
