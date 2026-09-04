@@ -66,7 +66,9 @@
     cursor:pointer;user-select:none;
     transition:transform .12s ease, background .15s ease, color .15s ease;
   }
+  .cell.dark{background:#e4ebf3}
   .cell.cleared{color:var(--ghost);border-color:#f2f6fa;cursor:default;background:#fcfdfe}
+  .cell.dark.cleared{background:#eef3f8}
   .cell.sel{background:var(--gold);color:#fff;border-color:var(--gold-dark);transform:scale(1.06)}
   .cell.hit{animation:pop .32s ease}
   .cell.bad{animation:shake .3s ease}
@@ -471,7 +473,8 @@
     const frag = document.createDocumentFragment();
     S.cells.forEach((c,i)=>{
       const d = document.createElement("div");
-      d.className = "cell" + (c.cleared?" cleared":"") + (i===sel?" sel":"");
+      const diag = (Math.floor(i/COLS) + (i%COLS)) % 2 === 1;   // أقطار من اليمين لليسار
+      d.className = "cell" + (diag?" dark":"") + (c.cleared?" cleared":"") + (i===sel?" sel":"");
       if(tipPair && tipPair.indexOf(i)>-1) d.classList.add("tip");
       if(flash && flash.indexOf(i)>-1) d.classList.add(cls);
       d.textContent = c.v;
