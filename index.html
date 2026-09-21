@@ -495,15 +495,25 @@
     $("btnHint").disabled = false;
     $("btnUndo").disabled = !S.undo;
 
-    if(!anyMoveLeft() && canAdd()) say("لا توجد حركات — اضغط إضافة أرقام", true);
+    refreshStuck();
   }
 
-  function say(t, warn){
+  // رسالة "لا توجد حركات" تبقى ظاهرة ما دام الوضع قائمًا
+  const STUCK_MSG = "لا توجد حركات — اضغط إضافة أرقام";
+  let stuckShown = false;
+  function refreshStuck(){
+    const stuck = !!S && !anyMoveLeft() && canAdd();
+    if(stuck) say(STUCK_MSG, true, true);
+    else if(stuckShown) say("");
+    stuckShown = stuck;
+  }
+
+  function say(t, warn, sticky){
     const el = $("msg");
     el.textContent = t;
     el.className = "hintline" + (warn?" warn":"");
     clearTimeout(msgT);
-    if(t) msgT = setTimeout(()=>{ el.textContent=""; }, 2600);
+    if(t && !sticky) msgT = setTimeout(()=>{ el.textContent=""; refreshStuck(); }, 2600);
   }
 
   // ---------- النافذة ----------
