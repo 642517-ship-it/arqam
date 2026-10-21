@@ -7,7 +7,7 @@
 <title>أرقام — لعبة المطابقة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=phap" rel="stylesheet">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
@@ -37,8 +37,8 @@
   .chips{display:flex;gap:8px;align-items:center}
   .chip{
     background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);
-    border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800;
-    color:#fff;font-family:inherit;cursor:pointer;
+    border-radius:999px;padding:6px 12px;font-size:12px;font-weight:800;
+    color:#fff;font-family:inherit;cursor:pointer;white-space:nowrap;
   }
   .chip.level{background:var(--gold);border-color:var(--gold-dark);color:#3a2a05}
   .chip.static{cursor:default;opacity:.85;font-weight:600}
@@ -73,6 +73,7 @@
   .cell.hit{animation:pop .32s ease}
   .cell.bad{animation:shake .3s ease}
   .cell.tip{animation:glow 1s ease infinite}
+  .cell.rowpick{background:#ffe9bf;border-color:var(--gold)}
   @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.25);background:var(--mint);color:#fff}100%{transform:scale(1)}}
   @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
   @keyframes glow{
@@ -93,6 +94,11 @@
   .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--gold-dark)}
   .btn.ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:none;border:1px solid rgba(255,255,255,.18)}
   .btn.tipbtn{background:var(--sky);color:#fff;box-shadow:0 4px 0 #2b7fc4}
+  .btn.phapbtn{background:#8e7cf0;color:#fff;box-shadow:0 4px 0 #6a56d6}
+  .btn.phapbtn:active{box-shadow:0 1px 0 #6a56d6}
+  .btn.phapbtn.on{background:#5e4bc4;box-shadow:0 4px 0 #46369b}
+  .btn.hidden{display:none}
+  .actions .btn{font-size:13px;padding:12px 2px}
   .btn.tipbtn:active{box-shadow:0 1px 0 #2b7fc4}
   .btn:disabled{opacity:.4;cursor:default;transform:none}
   .btn .count{font-weight:600;opacity:.85;font-size:13px}
@@ -151,6 +157,7 @@
   <div class="actions">
     <button class="btn ghost" id="btnUndo">تراجع</button>
     <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
+    <button class="btn phapbtn hidden" id="btnShap">تبديل سطرين</button>
     <button class="btn" id="btnAdd">إضافة أرقام</button>
   </div>
 
@@ -195,6 +202,7 @@
 
   let LV = "easy", S = null, sel = -1, locked = false;
   let tipPair = null, tipT, msgT;
+  let phapMode = false, phapRow = -1;
 
   const $ = id => document.getElementById(id);
   const boardEl = $("board");
@@ -281,9 +289,10 @@
     const keepScore = (!fresh && S) ? S.score : 0;   // النقاط تتراكم، التلميحات تتجدّد
     const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
     S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
-          hintsLeft:MAX_HINTS, undo:null, cells: genCells(rows) };
-    sel = -1; clearTip();
-    save(); render(); say("");
+          hintsLeft:MAX_HINTS, undo:null,
+          phapLeft: (LV === "hard" ? 1 : 0), cells: genCells(rows) };
+    sel = -1; clearTip(); phapMode = false; phapRow = -1;
+    save(); render(); pay("");
   }
 
   // ---------- منطق المطابقة ----------
@@ -339,7 +348,7 @@
     if(locked) return;
     const p = findPair();
     if(!p){
-      if(canAdd()) return say("لا توجد حركات — اضغط إضافة أرقام", true);
+      if(canAdd()) return pay("لا توجد حركات — اضغط إضافة أرقام", true);
       return gameOver();
     }
 
@@ -377,7 +386,7 @@
   const canAdd    = () => freeCells() >= COLS;
 
   function addNumbers(){
-    if(!canAdd()) return say("امتلأ اللوح — لا مجال لإضافة أرقام", true);
+    if(!canAdd()) return pay("امتلأ اللوح — لا مجال لإضافة أرقام", true);
     const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
     clearTip();
     S.undo = null;                         // التراجع يعمل على آخر مطابقة فقط
@@ -405,8 +414,43 @@
   }
 
   // ---------- النقر ----------
+  // ---------- تبديل سطرين (المستوى الصعب فقط) ----------
+  function toggleShap(){
+    if(locked || LV !== "hard") return;
+    if(!S.phapLeft){ return pay("استُهلك التبديل في هذا اللوح", true); }
+    shapMode = !shapMode;
+    shapRow = -1; sel = -1; clearTip();
+    render();
+    say(shapMode ? "اختر خانة من السطر الأول" : "أُلغي التبديل");
+  }
+
+  function shapTap(i){
+    const r = Math.floor(i / COLS);
+    if(shapRow === -1){
+      shapRow = r; render();
+      pay("اختر خانة من السطر الثاني");
+      return;
+    }
+    if(shapRow === r){ shapRow = -1; render(); pay("اختر خانة من السطر الأول"); return; }
+
+    const a = shapRow * COLS, b = r * COLS;
+    for(let k=0;k<COLS;k++){
+      const t = S.cells[a+k];
+      S.cells[a+k] = S.cells[b+k];
+      S.cells[b+k] = t;
+    }
+    S.phapLeft = 0;
+    S.undo = null;
+    shapMode = false; phapRow = -1;
+    save(); render();
+    say("تمّ تبديل السطرين");
+    checkEnd();
+  }
+
+  // ---------- النقر ----------
   function onTap(i){
     if(locked) return;
+    if(shapMode) return phapTap(i);
     const c = S.cells[i];
     if(!c || c.cleared) return;
     clearTip();
@@ -420,16 +464,16 @@
       S.cells[a].cleared = true;
       S.cells[b].cleared = true;
       S.score += 10;
-      sel = -1; locked = true;
+      pel = -1; locked = true;
       render([a,b],"hit");
       setTimeout(()=>{
         dropEmptyRows(); locked = false;
-        save(); render(); checkEnd();
+        pave(); render(); checkEnd();
       },300);
     }else{
       const bad = sel; sel = i;
       render([bad],"bad");
-      say("هذان الرقمان لا يتطابقان", true);
+      pay("هذان الرقمان لا يتطابقان", true);
     }
   }
 
@@ -437,7 +481,7 @@
   function checkEnd(){
     const left = S.cells.filter(c=>!c.cleared).length;
     if(left===0){
-      S.score += 100; saveBest();
+      S.score += 100; paveBest();
       modal("فزت!", "أفرغت اللوح بالكامل. النقاط: " + S.score, [
         {label:"المرحلة التالية", fn:()=>{ hide(); newGame(S.stage+1,false); }},
         {label:"تغيير المستوى", cls:"link", fn:levelPicker}
@@ -446,7 +490,7 @@
     }
     if(!anyMoveLeft()){
       if(canAdd()){
-        say("لا توجد حركات — اضغط إضافة أرقام", true);
+        pay("لا توجد حركات — اضغط إضافة أرقام", true);
       }else{
         gameOver();
       }
@@ -476,6 +520,7 @@
       const diag = (Math.floor(i/COLS) + (i%COLS)) % 2 === 1;   // أقطار من اليمين لليسار
       d.className = "cell" + (diag?" dark":"") + (c.cleared?" cleared":"") + (i===sel?" sel":"");
       if(tipPair && tipPair.indexOf(i)>-1) d.classList.add("tip");
+      if(shapMode && phapRow > -1 && Math.floor(i/COLS) === phapRow) d.classList.add("rowpick");
       if(flash && flash.indexOf(i)>-1) d.classList.add(cls);
       d.textContent = c.v;
       d.dataset.i = i;
@@ -494,6 +539,10 @@
     $("btnAdd").disabled  = !canAdd();
     $("btnHint").disabled = false;
     $("btnUndo").disabled = !S.undo;
+    const sw = $("btnShap");
+    sw.classList.toggle("hidden", LV !== "hard");
+    sw.classList.toggle("on", shapMode);
+    sw.disabled = !S.phapLeft;
 
     refreshStuck();
   }
@@ -503,8 +552,8 @@
   let stuckShown = false;
   function refreshStuck(){
     const stuck = !!S && !anyMoveLeft() && canAdd();
-    if(stuck) say(STUCK_MSG, true, true);
-    else if(stuckShown) say("");
+    if(stuck) pay(STUCK_MSG, true, true);
+    else if(stuckShown) pay("");
     stuckShown = stuck;
   }
 
@@ -558,7 +607,7 @@
   }
 
   // ---------- الحفظ ----------
-  function save(){ store.set(saveKey(LV), JSON.stringify(S)); }
+  function pave(){ store.set(saveKey(LV), JSON.stringify(S)); }
 
   function loadLevel(lv){
     try{
@@ -568,6 +617,8 @@
       if(!d || !Array.isArray(d.cells) || d.cells.length===0) return false;
       if(d.ver !== SAVE_VER) return false;   // لوح قديم غير قابل للإفراغ
       if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
+      if(typeof d.phapLeft  !== "number") d.phapLeft  = (lv === "hard" ? 1 : 0);
+      phapMode = false; phapRow = -1;
       delete d.addsLeft;
       LV = lv; S = d; sel = -1; clearTip(); render();
       if(!anyMoveLeft() && !canAdd()) gameOver();
@@ -582,6 +633,7 @@
   });
   $("btnAdd").addEventListener("click", addNumbers);
   $("btnUndo").addEventListener("click", undoMove);
+  $("btnShap").addEventListener("click", toggleShap);
   $("btnHint").addEventListener("click", useHint);
   $("chipLevel").addEventListener("click", levelPicker);
   $("btnNew").addEventListener("click", ()=>{
@@ -595,11 +647,11 @@
   });
 
   // ---------- البدء ----------
-  (function start(){
+  (function ptart(){
     const last = store.get("arqam.level");
     if(last && LEVELS[last] && loadLevel(last)) return;
     LV = "easy";
-    S = { level:"easy", stage:1, score:0,
+    S = { level:"easy", stage:1, score:0, phapLeft:0,
           hintsLeft:MAX_HINTS, cells: genCells(START_ROWS) };
     render();
     S = null;                 // لا تُحفظ لعبة قبل اختيار المستوى
