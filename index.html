@@ -7,7 +7,7 @@
 <title>أرقام — لعبة المطابقة</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=phap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
@@ -94,9 +94,9 @@
   .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--gold-dark)}
   .btn.ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:none;border:1px solid rgba(255,255,255,.18)}
   .btn.tipbtn{background:var(--sky);color:#fff;box-shadow:0 4px 0 #2b7fc4}
-  .btn.phapbtn{background:#8e7cf0;color:#fff;box-shadow:0 4px 0 #6a56d6}
-  .btn.phapbtn:active{box-shadow:0 1px 0 #6a56d6}
-  .btn.phapbtn.on{background:#5e4bc4;box-shadow:0 4px 0 #46369b}
+  .btn.swapbtn{background:#8e7cf0;color:#fff;box-shadow:0 4px 0 #6a56d6}
+  .btn.swapbtn:active{box-shadow:0 1px 0 #6a56d6}
+  .btn.swapbtn.on{background:#5e4bc4;box-shadow:0 4px 0 #46369b}
   .btn.hidden{display:none}
   .actions .btn{font-size:13px;padding:12px 2px}
   .btn.tipbtn:active{box-shadow:0 1px 0 #2b7fc4}
@@ -157,7 +157,7 @@
   <div class="actions">
     <button class="btn ghost" id="btnUndo">تراجع</button>
     <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
-    <button class="btn phapbtn hidden" id="btnShap">تبديل سطرين</button>
+    <button class="btn swapbtn hidden" id="btnSwap">تبديل سطرين</button>
     <button class="btn" id="btnAdd">إضافة أرقام</button>
   </div>
 
@@ -202,7 +202,7 @@
 
   let LV = "easy", S = null, sel = -1, locked = false;
   let tipPair = null, tipT, msgT;
-  let phapMode = false, phapRow = -1;
+  let swapMode = false, swapRow = -1;
 
   const $ = id => document.getElementById(id);
   const boardEl = $("board");
@@ -290,9 +290,9 @@
     const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
     S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
           hintsLeft:MAX_HINTS, undo:null,
-          phapLeft: (LV === "hard" ? 1 : 0), cells: genCells(rows) };
-    sel = -1; clearTip(); phapMode = false; phapRow = -1;
-    save(); render(); pay("");
+          swapLeft: (LV === "hard" ? 1 : 0), cells: genCells(rows) };
+    sel = -1; clearTip(); swapMode = false; swapRow = -1;
+    save(); render(); say("");
   }
 
   // ---------- منطق المطابقة ----------
@@ -348,7 +348,7 @@
     if(locked) return;
     const p = findPair();
     if(!p){
-      if(canAdd()) return pay("لا توجد حركات — اضغط إضافة أرقام", true);
+      if(canAdd()) return say("لا توجد حركات — اضغط إضافة أرقام", true);
       return gameOver();
     }
 
@@ -386,7 +386,7 @@
   const canAdd    = () => freeCells() >= COLS;
 
   function addNumbers(){
-    if(!canAdd()) return pay("امتلأ اللوح — لا مجال لإضافة أرقام", true);
+    if(!canAdd()) return say("امتلأ اللوح — لا مجال لإضافة أرقام", true);
     const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
     clearTip();
     S.undo = null;                         // التراجع يعمل على آخر مطابقة فقط
@@ -415,33 +415,33 @@
 
   // ---------- النقر ----------
   // ---------- تبديل سطرين (المستوى الصعب فقط) ----------
-  function toggleShap(){
+  function toggleSwap(){
     if(locked || LV !== "hard") return;
-    if(!S.phapLeft){ return pay("استُهلك التبديل في هذا اللوح", true); }
-    shapMode = !shapMode;
-    shapRow = -1; sel = -1; clearTip();
+    if(!S.swapLeft){ return say("استُهلك التبديل في هذا اللوح", true); }
+    swapMode = !swapMode;
+    swapRow = -1; sel = -1; clearTip();
     render();
-    say(shapMode ? "اختر خانة من السطر الأول" : "أُلغي التبديل");
+    say(swapMode ? "اختر خانة من السطر الأول" : "أُلغي التبديل");
   }
 
-  function shapTap(i){
+  function swapTap(i){
     const r = Math.floor(i / COLS);
-    if(shapRow === -1){
-      shapRow = r; render();
-      pay("اختر خانة من السطر الثاني");
+    if(swapRow === -1){
+      swapRow = r; render();
+      say("اختر خانة من السطر الثاني");
       return;
     }
-    if(shapRow === r){ shapRow = -1; render(); pay("اختر خانة من السطر الأول"); return; }
+    if(swapRow === r){ swapRow = -1; render(); say("اختر خانة من السطر الأول"); return; }
 
-    const a = shapRow * COLS, b = r * COLS;
+    const a = swapRow * COLS, b = r * COLS;
     for(let k=0;k<COLS;k++){
       const t = S.cells[a+k];
       S.cells[a+k] = S.cells[b+k];
       S.cells[b+k] = t;
     }
-    S.phapLeft = 0;
+    S.swapLeft = 0;
     S.undo = null;
-    shapMode = false; phapRow = -1;
+    swapMode = false; swapRow = -1;
     save(); render();
     say("تمّ تبديل السطرين");
     checkEnd();
@@ -450,7 +450,7 @@
   // ---------- النقر ----------
   function onTap(i){
     if(locked) return;
-    if(shapMode) return phapTap(i);
+    if(swapMode) return swapTap(i);
     const c = S.cells[i];
     if(!c || c.cleared) return;
     clearTip();
@@ -464,16 +464,16 @@
       S.cells[a].cleared = true;
       S.cells[b].cleared = true;
       S.score += 10;
-      pel = -1; locked = true;
+      sel = -1; locked = true;
       render([a,b],"hit");
       setTimeout(()=>{
         dropEmptyRows(); locked = false;
-        pave(); render(); checkEnd();
+        save(); render(); checkEnd();
       },300);
     }else{
       const bad = sel; sel = i;
       render([bad],"bad");
-      pay("هذان الرقمان لا يتطابقان", true);
+      say("هذان الرقمان لا يتطابقان", true);
     }
   }
 
@@ -481,7 +481,7 @@
   function checkEnd(){
     const left = S.cells.filter(c=>!c.cleared).length;
     if(left===0){
-      S.score += 100; paveBest();
+      S.score += 100; saveBest();
       modal("فزت!", "أفرغت اللوح بالكامل. النقاط: " + S.score, [
         {label:"المرحلة التالية", fn:()=>{ hide(); newGame(S.stage+1,false); }},
         {label:"تغيير المستوى", cls:"link", fn:levelPicker}
@@ -490,7 +490,7 @@
     }
     if(!anyMoveLeft()){
       if(canAdd()){
-        pay("لا توجد حركات — اضغط إضافة أرقام", true);
+        say("لا توجد حركات — اضغط إضافة أرقام", true);
       }else{
         gameOver();
       }
@@ -520,7 +520,7 @@
       const diag = (Math.floor(i/COLS) + (i%COLS)) % 2 === 1;   // أقطار من اليمين لليسار
       d.className = "cell" + (diag?" dark":"") + (c.cleared?" cleared":"") + (i===sel?" sel":"");
       if(tipPair && tipPair.indexOf(i)>-1) d.classList.add("tip");
-      if(shapMode && phapRow > -1 && Math.floor(i/COLS) === phapRow) d.classList.add("rowpick");
+      if(swapMode && swapRow > -1 && Math.floor(i/COLS) === swapRow) d.classList.add("rowpick");
       if(flash && flash.indexOf(i)>-1) d.classList.add(cls);
       d.textContent = c.v;
       d.dataset.i = i;
@@ -539,10 +539,10 @@
     $("btnAdd").disabled  = !canAdd();
     $("btnHint").disabled = false;
     $("btnUndo").disabled = !S.undo;
-    const sw = $("btnShap");
+    const sw = $("btnSwap");
     sw.classList.toggle("hidden", LV !== "hard");
-    sw.classList.toggle("on", shapMode);
-    sw.disabled = !S.phapLeft;
+    sw.classList.toggle("on", swapMode);
+    sw.disabled = !S.swapLeft;
 
     refreshStuck();
   }
@@ -552,8 +552,8 @@
   let stuckShown = false;
   function refreshStuck(){
     const stuck = !!S && !anyMoveLeft() && canAdd();
-    if(stuck) pay(STUCK_MSG, true, true);
-    else if(stuckShown) pay("");
+    if(stuck) say(STUCK_MSG, true, true);
+    else if(stuckShown) say("");
     stuckShown = stuck;
   }
 
@@ -607,7 +607,7 @@
   }
 
   // ---------- الحفظ ----------
-  function pave(){ store.set(saveKey(LV), JSON.stringify(S)); }
+  function save(){ store.set(saveKey(LV), JSON.stringify(S)); }
 
   function loadLevel(lv){
     try{
@@ -617,8 +617,8 @@
       if(!d || !Array.isArray(d.cells) || d.cells.length===0) return false;
       if(d.ver !== SAVE_VER) return false;   // لوح قديم غير قابل للإفراغ
       if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
-      if(typeof d.phapLeft  !== "number") d.phapLeft  = (lv === "hard" ? 1 : 0);
-      phapMode = false; phapRow = -1;
+      if(typeof d.swapLeft  !== "number") d.swapLeft  = (lv === "hard" ? 1 : 0);
+      swapMode = false; swapRow = -1;
       delete d.addsLeft;
       LV = lv; S = d; sel = -1; clearTip(); render();
       if(!anyMoveLeft() && !canAdd()) gameOver();
@@ -633,7 +633,7 @@
   });
   $("btnAdd").addEventListener("click", addNumbers);
   $("btnUndo").addEventListener("click", undoMove);
-  $("btnShap").addEventListener("click", toggleShap);
+  $("btnSwap").addEventListener("click", toggleSwap);
   $("btnHint").addEventListener("click", useHint);
   $("chipLevel").addEventListener("click", levelPicker);
   $("btnNew").addEventListener("click", ()=>{
@@ -647,11 +647,11 @@
   });
 
   // ---------- البدء ----------
-  (function ptart(){
+  (function start(){
     const last = store.get("arqam.level");
     if(last && LEVELS[last] && loadLevel(last)) return;
     LV = "easy";
-    S = { level:"easy", stage:1, score:0, phapLeft:0,
+    S = { level:"easy", stage:1, score:0, swapLeft:0,
           hintsLeft:MAX_HINTS, cells: genCells(START_ROWS) };
     render();
     S = null;                 // لا تُحفظ لعبة قبل اختيار المستوى
