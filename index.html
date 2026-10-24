@@ -157,7 +157,7 @@
   <div class="actions">
     <button class="btn ghost" id="btnUndo">تراجع</button>
     <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
-    <button class="btn swapbtn hidden" id="btnSwap">تبديل سطرين</button>
+    <button class="btn swapbtn hidden" id="btnSwap">تبديل <span class="count" id="swapLeft">(3)</span></button>
     <button class="btn" id="btnAdd">إضافة أرقام</button>
   </div>
 
@@ -182,6 +182,7 @@
   const SAVE_VER     = 2;   // نسخة الحفظ — تُهمل الألواح القديمة الفردية
   const MAX_HINTS  = 3;   // تلميحات مجانية
   const HINT_COST  = 20;  // كلفة التلميح بعد نفادها
+  const MAX_SWAPS  = 3;   // تبديل سطرين — لكل لوح في المستوى الصعب
 
   const LEVELS = {
     easy:   { name:"سهل",   cls:"lv-easy" },
@@ -290,7 +291,7 @@
     const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
     S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
           hintsLeft:MAX_HINTS, undo:null,
-          swapLeft: (LV === "hard" ? 1 : 0), cells: genCells(rows) };
+          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: genCells(rows) };
     sel = -1; clearTip(); swapMode = false; swapRow = -1;
     save(); render(); say("");
   }
@@ -418,6 +419,7 @@
   function toggleSwap(){
     if(locked || LV !== "hard") return;
     if(!S.swapLeft){ return say("استُهلك التبديل في هذا اللوح", true); }
+    
     swapMode = !swapMode;
     swapRow = -1; sel = -1; clearTip();
     render();
@@ -439,11 +441,11 @@
       S.cells[a+k] = S.cells[b+k];
       S.cells[b+k] = t;
     }
-    S.swapLeft = 0;
+    S.swapLeft--;
     S.undo = null;
     swapMode = false; swapRow = -1;
     save(); render();
-    say("تمّ تبديل السطرين");
+    say("تمّ تبديل السطرين — بقي " + S.swapLeft);
     checkEnd();
   }
 
@@ -543,6 +545,7 @@
     sw.classList.toggle("hidden", LV !== "hard");
     sw.classList.toggle("on", swapMode);
     sw.disabled = !S.swapLeft;
+    $("swapLeft").textContent = "(" + (S.swapLeft || 0) + ")";
 
     refreshStuck();
   }
@@ -617,7 +620,7 @@
       if(!d || !Array.isArray(d.cells) || d.cells.length===0) return false;
       if(d.ver !== SAVE_VER) return false;   // لوح قديم غير قابل للإفراغ
       if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
-      if(typeof d.swapLeft  !== "number") d.swapLeft  = (lv === "hard" ? 1 : 0);
+      if(typeof d.swapLeft  !== "number") d.swapLeft  = (lv === "hard" ? MAX_SWAPS : 0);
       swapMode = false; swapRow = -1;
       delete d.addsLeft;
       LV = lv; S = d; sel = -1; clearTip(); render();
