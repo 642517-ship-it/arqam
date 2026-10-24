@@ -1,5 +1,5 @@
 // عامل الخدمة — غيّر رقم النسخة عند كل تحديث للّعبة
-const VERSION = "arqam-v7";
+const VERSION = "arqam-v8";
 const ASSETS = [
   "./",
   "./index.html",
@@ -30,7 +30,6 @@ self.addEventListener("fetch", e=>{
   const req = e.request;
   if(req.method !== "GET") return;
 
-  // صفحات التنقّل: الشبكة أولًا ثم الذاكرة عند انقطاع الإنترنت
   if(req.mode === "navigate"){
     e.respondWith(
       fetch(req)
@@ -44,7 +43,6 @@ self.addEventListener("fetch", e=>{
     return;
   }
 
-  // بقيّة الملفات: الذاكرة أولًا
   e.respondWith(
     caches.match(req).then(hit => hit || fetch(req).then(res => {
       if(res.ok && new URL(req.url).origin === location.origin){
