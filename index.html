@@ -178,7 +178,9 @@
   const COLS       = 9;
   const START_ROWS   = 4;   // زوجي دائمًا: كل حركة تحذف رقمين
   const MAX_ROWS     = 12;  // سعة اللوح الأساسية (تكبر مع المراحل)
-  const TOP_ROWS     = 8;   // أقصى عدد أسطر لبداية اللوح (زوجي دائمًا)
+  const TOP_ROWS     = 12;  // أقصى عدد أسطر لبداية اللوح
+  const BASE_FILL    = 36;  // عدد الأرقام في المرحلة الأولى
+  const FILL_STEP    = 4;   // زيادة الأرقام في كل مرحلة
   const ROWS_PER_ADD = 2;   // صفوف تُضاف في كل ضغطة (زوجي)
   const SAVE_VER     = 2;   // نسخة الحفظ — تُهمل الألواح القديمة الفردية
   const MAX_HINTS  = 3;   // تلميحات مجانية
@@ -269,34 +271,63 @@
     return Math.min(2, ORDER.indexOf(LV) + Math.floor(((stage||1) - 1) / 3));
   }
 
-  function genCells(rows, stage){
-    const n = (rows * COLS) - ((rows * COLS) % 2), tries = [];
-    for(let t=0;t<400;t++){
-      const arr = randArr(n);
-      if(!varied(arr)) continue;
-      tries.push({ arr, c: openPairs(arr) });
+  // عدد الأرقام المطلوب في مرحلة ما (زوجي دائمًا)
+  function fillFor(rows, stage){
+    let f = Math.min(rows * COLS, BASE_FILL + FILL_STEP * ((stage||1) - 1));
+    if(f % 2) f--;
+    return f;
+  }
+
+  // اختيار مواقع الأرقام: سطر واحد على الأقل لا يبقى فارغًا
+  function pickSpots(rows, filled){
+    const spots = [], rest = [];
+    for(let r=0;r<rows;r++){
+      const c = Math.floor(Math.random()*COLS);
+      spots.push(r*COLS + c);
+      for(let k=0;k<COLS;k++) if(k !== c) rest.push(r*COLS + k);
     }
-    if(tries.length === 0) return randArr(n).map(v => ({ v, cleared:false }));
+    for(let i=rest.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      const t = rest[i]; rest[i] = rest[j]; rest[j] = t;
+    }
+    const need = Math.max(0, filled - spots.length);
+    return spots.concat(rest.slice(0, need));
+  }
+
+  // لوح متباعد: أرقام موزّعة على الأسطر وخانات فارغة بينها
+  function buildBoard(rows, filled, values){
+    const cells = [];
+    for(let i=0;i<rows*COLS;i++) cells.push({ v: 1 + Math.floor(Math.random()*9), cleared: true });
+    const spots = pickSpots(rows, filled);
+    spots.forEach((p, k) => { cells[p] = { v: values[k], cleared: false }; });
+    return cells;
+  }
+
+  function genCells(rows, stage){
+    const filled = fillFor(rows, stage), tries = [];
+    for(let t=0;t<40;t++){
+      const vals = randArr(filled);
+      if(!varied(vals)) continue;
+      const cells = buildBoard(rows, filled, vals);
+      tries.push({ cells, c: movesIn(cells) });
+    }
+    if(tries.length === 0) return buildBoard(rows, filled, randArr(filled));
     tries.sort((a,b)=> a.c - b.c);
 
-    let pick;
+    const playable = tries.filter(t => t.c >= 3);
+    const pool = playable.length ? playable : [tries[tries.length-1]];
+
     const di = diffIndex(stage);
-    if(di === 0){
-      pick = tries[tries.length-1];                       // أكثر الحلول ظهورًا
-    }else if(di === 1){
-      pick = tries[Math.floor(tries.length/2)];           // الوسط
-    }else{
-      const ok = tries.filter(t => t.c >= 3);             // الأقل حلولًا مع ضمان اللعب
-      pick = ok.length ? ok[0] : tries[tries.length-1];
-    }
-    return pick.arr.map(v => ({ v, cleared:false }));
+    if(di === 0) return pool[pool.length-1].cells;            // أكثر الحلول ظهورًا
+    if(di === 1) return pool[Math.floor(pool.length/2)].cells; // الوسط
+    return pool[0].cells;                                      // الأقل حلولًا
   }
 
   // ---------- لعبة ----------
   function newGame(stage, fresh){
     const keepScore = (!fresh && S) ? S.score : 0;   // النقاط تتراكم، التلميحات تتجدّد
     const st   = stage || 1;
-    const rows = Math.min(TOP_ROWS, START_ROWS + 2 * Math.floor((st - 1) / 2));
+    const rows = Math.min(TOP_ROWS, START_ROWS + (st - 1));
     S = { ver:SAVE_VER, level:LV, stage: st, score:keepScore,
           hintsLeft:MAX_HINTS, undo:null, maxRows: Math.max(MAX_ROWS, rows + 6),
           swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: genCells(rows, st) };
@@ -305,9 +336,9 @@
   }
 
   // ---------- منطق المطابقة ----------
-  function pathClear(i,j){
+  function pathClear(i,j,cells){
     if(i>j){ const t=i; i=j; j=t; }
-    const c = S.cells;
+    const c = cells || S.cells;
 
     let ok = true;                                   // ترتيب القراءة
     for(let k=i+1;k<j;k++) if(!c[k].cleared){ ok=false; break; }
@@ -335,11 +366,22 @@
     return false;
   }
 
-  function canMatch(i,j){
-    const c = S.cells;
+  function canMatch(i,j,cells){
+    const c = cells || S.cells;
     if(i===j || i<0 || j<0 || !c[i] || !c[j]) return false;
     if(c[i].cleared || c[j].cleared) return false;
-    return good(c[i].v, c[j].v) && pathClear(i,j);
+    return good(c[i].v, c[j].v) && pathClear(i,j,c);
+  }
+
+  // عدد الحركات المتاحة في لوح معيّن
+  function movesIn(cells){
+    const idx = [];
+    cells.forEach((c,i)=>{ if(!c.cleared) idx.push(i); });
+    let n = 0;
+    for(let a=0;a<idx.length;a++)
+      for(let b=a+1;b<idx.length;b++)
+        if(canMatch(idx[a], idx[b], cells)) n++;
+    return n;
   }
 
   function findPair(){
