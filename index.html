@@ -177,7 +177,8 @@
 
   const COLS       = 9;
   const START_ROWS   = 4;   // زوجي دائمًا: كل حركة تحذف رقمين
-  const MAX_ROWS     = 12;  // سعة اللوح القصوى
+  const MAX_ROWS     = 12;  // سعة اللوح الأساسية (تكبر مع المراحل)
+  const TOP_ROWS     = 8;   // أقصى عدد أسطر لبداية اللوح (زوجي دائمًا)
   const ROWS_PER_ADD = 2;   // صفوف تُضاف في كل ضغطة (زوجي)
   const SAVE_VER     = 2;   // نسخة الحفظ — تُهمل الألواح القديمة الفردية
   const MAX_HINTS  = 3;   // تلميحات مجانية
@@ -263,7 +264,12 @@
     return a;
   }
 
-  function genCells(rows){
+  // الصعوبة تتصاعد مع المراحل: كل 3 مراحل ترفع الجدول درجة
+  function diffIndex(stage){
+    return Math.min(2, ORDER.indexOf(LV) + Math.floor(((stage||1) - 1) / 3));
+  }
+
+  function genCells(rows, stage){
     const n = (rows * COLS) - ((rows * COLS) % 2), tries = [];
     for(let t=0;t<400;t++){
       const arr = randArr(n);
@@ -274,9 +280,10 @@
     tries.sort((a,b)=> a.c - b.c);
 
     let pick;
-    if(LV === "easy"){
+    const di = diffIndex(stage);
+    if(di === 0){
       pick = tries[tries.length-1];                       // أكثر الحلول ظهورًا
-    }else if(LV === "medium"){
+    }else if(di === 1){
       pick = tries[Math.floor(tries.length/2)];           // الوسط
     }else{
       const ok = tries.filter(t => t.c >= 3);             // الأقل حلولًا مع ضمان اللعب
@@ -288,10 +295,11 @@
   // ---------- لعبة ----------
   function newGame(stage, fresh){
     const keepScore = (!fresh && S) ? S.score : 0;   // النقاط تتراكم، التلميحات تتجدّد
-    const rows = START_ROWS + 2 * Math.min(1, (stage||1) - 1);
-    S = { ver:SAVE_VER, level:LV, stage: stage||1, score:keepScore,
-          hintsLeft:MAX_HINTS, undo:null,
-          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: genCells(rows) };
+    const st   = stage || 1;
+    const rows = Math.min(TOP_ROWS, START_ROWS + 2 * Math.floor((st - 1) / 2));
+    S = { ver:SAVE_VER, level:LV, stage: st, score:keepScore,
+          hintsLeft:MAX_HINTS, undo:null, maxRows: Math.max(MAX_ROWS, rows + 6),
+          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: genCells(rows, st) };
     sel = -1; clearTip(); swapMode = false; swapRow = -1;
     save(); render(); say("");
   }
@@ -383,7 +391,7 @@
   }
 
   // ---------- إضافة ----------
-  const freeCells = () => MAX_ROWS*COLS - S.cells.length;
+  const freeCells = () => (S.maxRows || MAX_ROWS)*COLS - S.cells.length;
   const canAdd    = () => freeCells() >= COLS;
 
   function addNumbers(){
@@ -391,7 +399,7 @@
     const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
     clearTip();
     S.undo = null;                         // التراجع يعمل على آخر مطابقة فقط
-    S.cells = S.cells.concat(genCells(rows));             // أرقام جديدة بصعوبة المستوى
+    S.cells = S.cells.concat(genCells(rows, S.stage));    // أرقام جديدة بصعوبة المستوى والمرحلة
     save(); render();
     const left = Math.floor(freeCells()/COLS);
     say("أُضيفت " + rows + " صفوف — بقي مجال لـ " + left + " صفوف");
@@ -617,11 +625,17 @@
       const raw = store.get(saveKey(lv));
       if(!raw) return false;
       const d = JSON.parse(raw);
-      if(!d || !Array.isArray(d.cells) || d.cells.length===0) return false;
+      if(!d || !Array.isArray(d.cells)) return false;
       if(d.ver !== SAVE_VER) return false;   // لوح قديم غير قابل للإفراغ
       if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
       if(typeof d.swapLeft  !== "number") d.swapLeft  = (lv === "hard" ? MAX_SWAPS : 0);
+      if(typeof d.maxRows   !== "number") d.maxRows   = MAX_ROWS;
       swapMode = false; swapRow = -1;
+      if(d.cells.length === 0){            // فاز ولم يفتح المرحلة التالية بعد
+        LV = lv; S = d; sel = -1; clearTip();
+        newGame((d.stage || 1) + 1, false);
+        return true;
+      }
       delete d.addsLeft;
       LV = lv; S = d; sel = -1; clearTip(); render();
       if(!anyMoveLeft() && !canAdd()) gameOver();
@@ -654,8 +668,8 @@
     const last = store.get("arqam.level");
     if(last && LEVELS[last] && loadLevel(last)) return;
     LV = "easy";
-    S = { level:"easy", stage:1, score:0, swapLeft:0,
-          hintsLeft:MAX_HINTS, cells: genCells(START_ROWS) };
+    S = { level:"easy", stage:1, score:0, swapLeft:0, maxRows:MAX_ROWS,
+          hintsLeft:MAX_HINTS, cells: genCells(START_ROWS, 1) };
     render();
     S = null;                 // لا تُحفظ لعبة قبل اختيار المستوى
     levelPicker();
