@@ -103,6 +103,14 @@
   .btn:disabled{opacity:.4;cursor:default;transform:none}
   .btn .count{font-weight:600;opacity:.85;font-size:13px}
 
+  .movebar{display:none;gap:8px;justify-content:center;align-items:center}
+  .movebar.on{display:flex}
+  .movebar button{
+    border:0;border-radius:14px;padding:10px 18px;font-family:inherit;font-size:16px;
+    font-weight:800;color:#fff;background:#8e7cf0;box-shadow:0 3px 0 #6a56d6;cursor:pointer;
+  }
+  .movebar button:disabled{opacity:.35}
+  .movebar button.done{background:#17c3a2;box-shadow:0 3px 0 #0f9d82;font-size:14px}
   .hintline{text-align:center;font-size:13px;font-weight:600;min-height:20px;color:#9fb3c8}
   .hintline.warn{color:var(--rose)}
 
@@ -152,12 +160,18 @@
     <div class="board" id="board"></div>
   </div>
 
+  <div class="movebar" id="moveBar">
+    <button id="moveUp">▲</button>
+    <button id="moveDown">▼</button>
+    <button id="moveDone" class="done">تم</button>
+  </div>
+
   <div class="hintline" id="msg"></div>
 
   <div class="actions">
     <button class="btn ghost" id="btnUndo">تراجع</button>
     <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
-    <button class="btn swapbtn hidden" id="btnSwap">تبديل <span class="count" id="swapLeft">(3)</span></button>
+    <button class="btn swapbtn hidden" id="btnSwap">نقل سطر <span class="count" id="swapLeft">(3)</span></button>
     <button class="btn" id="btnAdd">إضافة أرقام</button>
   </div>
 
@@ -176,11 +190,11 @@
   "use strict";
 
   const COLS       = 9;
-  const START_ROWS   = 4;   // زوجي دائمًا: كل حركة تحذف رقمين
+  const START_ROWS   = 2;   // اللوح يبدأ بسطرين
   const MAX_ROWS     = 12;  // سعة اللوح الأساسية (تكبر مع المراحل)
-  const TOP_ROWS     = 12;  // أقصى عدد أسطر لبداية اللوح
-  const BASE_FILL    = 36;  // عدد الأرقام في المرحلة الأولى
-  const FILL_STEP    = 4;   // زيادة الأرقام في كل مرحلة
+  const TOP_ROWS     = 6;   // أقصى عدد أسطر لبداية اللوح
+  const BASE_FILL    = 18;  // عدد الأرقام في المرحلة الأولى
+  const FILL_STEP    = 2;   // زيادة الأرقام في كل مرحلة
   const ROWS_PER_ADD = 2;   // صفوف تُضاف في كل ضغطة (زوجي)
   const SAVE_VER     = 2;   // نسخة الحفظ — تُهمل الألواح القديمة الفردية
   const MAX_HINTS  = 3;   // تلميحات مجانية
@@ -272,10 +286,67 @@
   }
 
   // عدد الأرقام المطلوب في مرحلة ما (زوجي دائمًا)
-  function fillFor(rows, stage){
-    let f = Math.min(rows * COLS, BASE_FILL + FILL_STEP * ((stage||1) - 1));
+  function fillFor(stage){
+    let f = Math.min(TOP_ROWS * COLS, BASE_FILL + FILL_STEP * ((stage||1) - 1));
     if(f % 2) f--;
     return f;
+  }
+
+  const rowsFor = filled => Math.max(START_ROWS, Math.min(TOP_ROWS, Math.ceil(filled / COLS)));
+
+  // جوار خانتين حسب قواعد اللعبة على لوح معيّن (مواقع مرتّبة)
+  function linked(pos, i, j){
+    const set = pos.set;
+    const r1=Math.floor(i/COLS), c1=i%COLS, r2=Math.floor(j/COLS), c2=j%COLS;
+    if(c1===c2){
+      let ok=true;
+      for(let r=r1+1;r<r2;r++) if(set.has(r*COLS+c1)){ ok=false; break; }
+      if(ok) return true;
+    }
+    const dr=r2-r1, dc=c2-c1;
+    if(dr>0 && Math.abs(dc)===dr){
+      const st = dc>0 ? 1 : -1;
+      let ok=true;
+      for(let k=1;k<dr;k++) if(set.has((r1+k)*COLS + c1 + k*st)){ ok=false; break; }
+      if(ok) return true;
+    }
+    return false;
+  }
+
+  // لوح بلا أي حركة متاحة: لا خانتان مرتبطتان من مجموعة واحدة
+  function genStuck(rows, filled){
+    for(let t=0;t<3000;t++){
+      const idx = pickSpots(rows, filled).sort((a,b)=> a-b);
+      const pos = { set: new Set(idx) };
+      const adj = new Map(idx.map(i => [i, []]));
+      for(let a=0;a<idx.length;a++){
+        if(a+1 < idx.length){ adj.get(idx[a]).push(idx[a+1]); adj.get(idx[a+1]).push(idx[a]); }
+        for(let b=a+2;b<idx.length;b++){
+          if(linked(pos, idx[a], idx[b])){ adj.get(idx[a]).push(idx[b]); adj.get(idx[b]).push(idx[a]); }
+        }
+      }
+      const col = new Map();
+      let fail = false;
+      for(const i of idx){
+        const used = new Set(adj.get(i).map(j => col.get(j)).filter(x => x !== undefined));
+        const free = [0,1,2,3,4].filter(g => !used.has(g));
+        if(!free.length){ fail = true; break; }
+        col.set(i, free[Math.floor(Math.random()*free.length)]);
+      }
+      if(fail) continue;
+      const cnt = [0,0,0,0,0];
+      idx.forEach(i => cnt[col.get(i)]++);
+      if(cnt.some(c => c % 2)) continue;
+
+      const cells = [];
+      for(let i=0;i<rows*COLS;i++) cells.push({ v: 1 + Math.floor(Math.random()*9), cleared: true });
+      idx.forEach(i => {
+        const g = GROUPS[col.get(i)];
+        cells[i] = { v: g[Math.floor(Math.random()*g.length)], cleared: false };
+      });
+      return cells;
+    }
+    return null;
   }
 
   // اختيار مواقع الأرقام: سطر واحد على الأقل لا يبقى فارغًا
@@ -303,8 +374,8 @@
     return cells;
   }
 
-  function genCells(rows, stage){
-    const filled = fillFor(rows, stage), tries = [];
+  function genCells(rows, stage, filledWanted){
+    const filled = filledWanted || fillFor(stage), tries = [];
     for(let t=0;t<40;t++){
       const vals = randArr(filled);
       if(!varied(vals)) continue;
@@ -326,13 +397,16 @@
   // ---------- لعبة ----------
   function newGame(stage, fresh){
     const keepScore = (!fresh && S) ? S.score : 0;   // النقاط تتراكم، التلميحات تتجدّد
-    const st   = stage || 1;
-    const rows = Math.min(TOP_ROWS, START_ROWS + (st - 1));
+    const st     = stage || 1;
+    const filled = fillFor(st);
+    const rows   = rowsFor(filled);
+    // الصعب يبدأ دائمًا بلوح بلا حركات — يُجبرك على التفكير وإضافة أرقام
+    const cells  = (LV === "hard" && genStuck(rows, filled)) || genCells(rows, st, filled);
     S = { ver:SAVE_VER, level:LV, stage: st, score:keepScore,
           hintsLeft:MAX_HINTS, undo:null, maxRows: Math.max(MAX_ROWS, rows + 6),
-          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: genCells(rows, st) };
+          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: cells };
     sel = -1; clearTip(); swapMode = false; swapRow = -1;
-    save(); render(); say("");
+    say(""); save(); render();
   }
 
   // ---------- منطق المطابقة ----------
@@ -441,7 +515,11 @@
     const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
     clearTip();
     S.undo = null;                         // التراجع يعمل على آخر مطابقة فقط
-    S.cells = S.cells.concat(genCells(rows, S.stage));    // أرقام جديدة بصعوبة المستوى والمرحلة
+    let block = genCells(rows, S.stage, rows * COLS);
+    for(let t=0;t<5 && movesIn(S.cells.concat(block)) === 0;t++){
+      block = genCells(rows, S.stage, rows * COLS);       // لا تترك اللاعب عالقًا
+    }
+    S.cells = S.cells.concat(block);
     save(); render();
     const left = Math.floor(freeCells()/COLS);
     say("أُضيفت " + rows + " صفوف — بقي مجال لـ " + left + " صفوف");
@@ -465,38 +543,51 @@
   }
 
   // ---------- النقر ----------
-  // ---------- تبديل سطرين (المستوى الصعب فقط) ----------
+  // ---------- نقل سطر (المستوى الصعب فقط) ----------
+  let moved = false;
+
   function toggleSwap(){
     if(locked || LV !== "hard") return;
-    if(!S.swapLeft){ return say("استُهلك التبديل في هذا اللوح", true); }
-    
-    swapMode = !swapMode;
-    swapRow = -1; sel = -1; clearTip();
+    if(!S.swapLeft) return say("استُهلك النقل في هذا اللوح", true);
+    if(swapMode) return endMove();
+    swapMode = true; swapRow = -1; moved = false;
+    sel = -1; clearTip();
     render();
-    say(swapMode ? "اختر خانة من السطر الأول" : "أُلغي التبديل");
+    say("اختر خانة من السطر الذي تريد نقله");
   }
 
   function swapTap(i){
-    const r = Math.floor(i / COLS);
-    if(swapRow === -1){
-      swapRow = r; render();
-      say("اختر خانة من السطر الثاني");
-      return;
-    }
-    if(swapRow === r){ swapRow = -1; render(); say("اختر خانة من السطر الأول"); return; }
+    swapRow = Math.floor(i / COLS);
+    render();
+    say("حرّك السطر بالسهمين ثم اضغط تم");
+  }
 
-    const a = swapRow * COLS, b = r * COLS;
+  function moveRow(dir){
+    if(swapRow < 0) return;
+    const rows = Math.ceil(S.cells.length / COLS);
+    const to = swapRow + dir;
+    if(to < 0 || to >= rows) return;
+    const a = swapRow * COLS, b = to * COLS;
     for(let k=0;k<COLS;k++){
       const t = S.cells[a+k];
       S.cells[a+k] = S.cells[b+k];
       S.cells[b+k] = t;
     }
-    S.swapLeft--;
-    S.undo = null;
-    swapMode = false; swapRow = -1;
-    save(); render();
-    say("تمّ تبديل السطرين — بقي " + S.swapLeft);
-    checkEnd();
+    swapRow = to; moved = true;
+    render();
+  }
+
+  function endMove(){
+    if(moved){
+      S.swapLeft--;
+      S.undo = null;
+      save();
+      say("نُقل السطر — بقي " + S.swapLeft);
+    }else{
+      say("أُلغي النقل");
+    }
+    swapMode = false; swapRow = -1; moved = false;
+    render();
   }
 
   // ---------- النقر ----------
@@ -597,6 +688,11 @@
     sw.disabled = !S.swapLeft;
     $("swapLeft").textContent = "(" + (S.swapLeft || 0) + ")";
 
+    const rows = Math.ceil(S.cells.length / COLS);
+    $("moveBar").classList.toggle("on", swapMode && swapRow > -1);
+    $("moveUp").disabled   = swapRow <= 0;
+    $("moveDown").disabled = swapRow < 0 || swapRow >= rows - 1;
+
     refreshStuck();
   }
 
@@ -693,6 +789,9 @@
   $("btnAdd").addEventListener("click", addNumbers);
   $("btnUndo").addEventListener("click", undoMove);
   $("btnSwap").addEventListener("click", toggleSwap);
+  $("moveUp").addEventListener("click", ()=> moveRow(-1));
+  $("moveDown").addEventListener("click", ()=> moveRow(1));
+  $("moveDone").addEventListener("click", ()=>{ endMove(); checkEnd(); });
   $("btnHint").addEventListener("click", useHint);
   $("chipLevel").addEventListener("click", levelPicker);
   $("btnNew").addEventListener("click", ()=>{
