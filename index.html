@@ -375,7 +375,9 @@
   }
 
   function genCells(rows, stage, filledWanted){
-    const filled = filledWanted || fillFor(stage), tries = [];
+    let filled = filledWanted || fillFor(stage);
+    if(filled % 2) filled--;                 // لا يُسمح بعدد فردي أبدًا
+    const tries = [];
     for(let t=0;t<40;t++){
       const vals = randArr(filled);
       if(!varied(vals)) continue;
@@ -506,6 +508,30 @@
     return removed;
   }
 
+  const gIndex = v => GROUPS.findIndex(g => g.indexOf(v) > -1);
+
+  // قيم كتلة جديدة تُصلح أي خلل في تكافؤ اللوح الحالي
+  function healValues(count){
+    const cnt = [0,0,0,0,0];
+    S.cells.forEach(c => { if(!c.cleared) cnt[gIndex(c.v)]++; });
+    const odd = [];
+    cnt.forEach((n,i) => { if(n % 2) odd.push(i); });
+
+    const extra = odd.slice(0, count).map(i => {
+      const g = GROUPS[i];
+      return g[Math.floor(Math.random()*g.length)];
+    });
+    let base = count - extra.length;
+    if(base % 2) base--;
+
+    const vals = randArr(base).concat(extra);
+    for(let i=vals.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      const t = vals[i]; vals[i] = vals[j]; vals[j] = t;
+    }
+    return vals;
+  }
+
   // ---------- إضافة ----------
   const freeCells = () => (S.maxRows || MAX_ROWS)*COLS - S.cells.length;
   const canAdd    = () => freeCells() >= COLS;
@@ -515,10 +541,18 @@
     const rows = Math.min(ROWS_PER_ADD, Math.floor(freeCells()/COLS));
     clearTip();
     S.undo = null;                         // التراجع يعمل على آخر مطابقة فقط
-    let block = genCells(rows, S.stage, rows * COLS);
-    for(let t=0;t<5 && movesIn(S.cells.concat(block)) === 0;t++){
-      block = genCells(rows, S.stage, rows * COLS);       // لا تترك اللاعب عالقًا
+    const cands = [];
+    for(let t=0;t<12;t++){
+      const vals  = healValues(rows * COLS);              // تصحيح التكافؤ تلقائيًا
+      const cells = buildBoard(rows, vals.length, vals);
+      cands.push({ cells, c: movesIn(S.cells.concat(cells)) });
     }
+    const live = cands.filter(x => x.c > 0);              // لا تترك اللاعب عالقًا
+    const pool = live.length ? live.sort((a,b)=> a.c - b.c) : cands;
+    const di   = diffIndex(S.stage);
+    const block = di === 0 ? pool[pool.length-1].cells
+                : di === 1 ? pool[Math.floor(pool.length/2)].cells
+                : pool[0].cells;
     S.cells = S.cells.concat(block);
     save(); render();
     const left = Math.floor(freeCells()/COLS);
