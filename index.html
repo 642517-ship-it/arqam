@@ -404,7 +404,7 @@
     const rows   = rowsFor(filled);
     // الصعب يبدأ دائمًا بلوح بلا حركات — يُجبرك على التفكير وإضافة أرقام
     const cells  = (LV === "hard" && genStuck(rows, filled)) || genCells(rows, st, filled);
-    S = { ver:SAVE_VER, level:LV, stage: st, score:keepScore,
+    S = { ver:SAVE_VER, level:LV, stage: st, score:keepScore, startScore:keepScore,
           hintsLeft:MAX_HINTS, undo:null, maxRows: Math.max(MAX_ROWS, rows + 6),
           swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: cells };
     sel = -1; clearTip(); swapMode = false; swapRow = -1;
@@ -676,11 +676,21 @@
 
   function gameOver(){
     saveBest();
-    store.del(saveKey(LV));
+    S.lost = true;
+    save();                                   // كي تعود للمرحلة نفسها لو أُغلق التطبيق
     modal("انتهت اللعبة", "امتلأ اللوح ولا توجد حركات. نقاطك: " + S.score, [
-      {label:"لعبة جديدة", fn:()=>{ hide(); newGame(1,true); }},
+      {label:"أعد المرحلة " + S.stage, fn:()=>{ hide(); retryStage(); }},
+      {label:"لعبة جديدة من المرحلة 1", cls:"link", fn:()=>{ hide(); newGame(1,true); }},
       {label:"تغيير المستوى", cls:"link", fn:levelPicker}
     ]);
+  }
+
+  // إعادة المرحلة نفسها بنقاط بدايتها
+  function retryStage(){
+    const st = S.stage || 1;
+    const sc = (typeof S.startScore === "number") ? S.startScore : 0;
+    S = { score: sc };
+    newGame(st, false);
   }
 
   // ---------- النتائج ----------
@@ -803,6 +813,11 @@
       if(typeof d.swapLeft  !== "number") d.swapLeft  = (lv === "hard" ? MAX_SWAPS : 0);
       if(typeof d.maxRows   !== "number") d.maxRows   = MAX_ROWS;
       swapMode = false; swapRow = -1;
+      if(d.lost){                          // خسر ولم يُعد المرحلة بعد
+        LV = lv; S = d; sel = -1; clearTip();
+        retryStage();
+        return true;
+      }
       if(d.cells.length === 0){            // فاز ولم يفتح المرحلة التالية بعد
         LV = lv; S = d; sel = -1; clearTip();
         newGame((d.stage || 1) + 1, false);
