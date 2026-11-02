@@ -85,7 +85,10 @@
     .cell.hit,.cell.bad{animation:none}
   }
 
-  .actions{display:flex;gap:8px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .actions .btn{flex:1 1 28%}
+  .btn.zapbtn{background:#e8618c;color:#fff;box-shadow:0 4px 0 #c04570}
+  .btn.zapbtn:active{box-shadow:0 1px 0 #c04570}
   .btn{
     flex:1;border:0;border-radius:16px;padding:12px 6px;font-family:inherit;
     font-size:14px;font-weight:800;color:#3a2a05;background:var(--gold);
@@ -172,6 +175,7 @@
     <button class="btn ghost" id="btnUndo">تراجع</button>
     <button class="btn tipbtn" id="btnHint">تلميح <span class="count" id="hintsLeft">(3)</span></button>
     <button class="btn swapbtn hidden" id="btnSwap">نقل سطر <span class="count" id="swapLeft">(3)</span></button>
+    <button class="btn zapbtn" id="btnZap">مسح الكل <span class="count" id="zapLeft">(1)</span></button>
     <button class="btn" id="btnAdd">إضافة أرقام</button>
   </div>
 
@@ -199,7 +203,8 @@
   const SAVE_VER     = 2;   // نسخة الحفظ — تُهمل الألواح القديمة الفردية
   const MAX_HINTS  = 3;   // تلميحات مجانية
   const HINT_COST  = 20;  // كلفة التلميح بعد نفادها
-  const MAX_SWAPS  = 3;   // تبديل سطرين — لكل لوح في المستوى الصعب
+  const MAX_SWAPS  = 3;   // نقل سطر — لكل لوح في المستوى الصعب
+  const MAX_ZAPS   = 1;   // مسح كل الخيارات المتاحة — مرة لكل مرحلة
 
   const LEVELS = {
     easy:   { name:"سهل",   cls:"lv-easy" },
@@ -406,7 +411,7 @@
     const cells  = (LV === "hard" && genStuck(rows, filled)) || genCells(rows, st, filled);
     S = { ver:SAVE_VER, level:LV, stage: st, score:keepScore, startScore:keepScore,
           hintsLeft:MAX_HINTS, undo:null, maxRows: Math.max(MAX_ROWS, rows + 6),
-          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), cells: cells };
+          swapLeft: (LV === "hard" ? MAX_SWAPS : 0), zapLeft: MAX_ZAPS, cells: cells };
     sel = -1; clearTip(); swapMode = false; swapRow = -1;
     say(""); save(); render();
   }
@@ -563,17 +568,62 @@
 
   // ---------- التراجع ----------
   function snapshot(){
-    return { score: S.score, cells: S.cells.map(c => ({ v:c.v, cleared:c.cleared })) };
+    return { score: S.score, zapLeft: S.zapLeft,
+             cells: S.cells.map(c => ({ v:c.v, cleared:c.cleared })) };
   }
 
   function undoMove(){
     if(locked || !S.undo) return;
     S.cells = S.undo.cells.map(c => ({ v:c.v, cleared:c.cleared }));
     S.score = S.undo.score;
+    if(typeof S.undo.zapLeft === "number") S.zapLeft = S.undo.zapLeft;
     S.undo  = null;
     sel = -1; clearTip();
     save(); render();
     say("تراجعت عن آخر مطابقة");
+  }
+
+  // ---------- مسح كل الخيارات المتاحة (مرة لكل مرحلة) ----------
+  function zapAll(){
+    if(locked) return;
+    if(!S.zapLeft) return say("استُهلك المسح في هذه المرحلة", true);
+
+    const idx = [];
+    S.cells.forEach((c,i) => { if(!c.cleared) idx.push(i); });
+
+    const used = new Set(), pairs = [];
+    for(let a=0;a<idx.length;a++){
+      if(used.has(idx[a])) continue;
+      for(let b=a+1;b<idx.length;b++){
+        if(used.has(idx[b])) continue;
+        if(canMatch(idx[a], idx[b])){        // أزواج اللحظة نفسها، بلا تفاعل متسلسل
+          used.add(idx[a]); used.add(idx[b]);
+          pairs.push([idx[a], idx[b]]);
+          break;
+        }
+      }
+    }
+
+    if(!pairs.length) return say("لا توجد خيارات لمسحها", true);
+
+    S.undo = snapshot();                     // يمكن التراجع عن المسح
+    const hit = [];
+    pairs.forEach(([a,b]) => {
+      S.cells[a].cleared = true;
+      S.cells[b].cleared = true;
+      hit.push(a, b);
+    });
+    S.score += pairs.length * 10;
+    S.zapLeft--;
+    sel = -1; clearTip();
+    locked = true;
+    render(hit, "hit");
+    setTimeout(()=>{
+      dropEmptyRows(); locked = false;
+      save(); render();
+      say("مُسح " + pairs.length + " زوجًا دفعة واحدة");
+      checkEnd();
+    }, 340);
   }
 
   // ---------- النقر ----------
@@ -734,6 +784,8 @@
 
     const rows = Math.ceil(S.cells.length / COLS);
     $("moveBar").classList.toggle("on", swapMode && swapRow > -1);
+    $("btnZap").disabled = !S.zapLeft;
+    $("zapLeft").textContent = "(" + (S.zapLeft || 0) + ")";
     $("moveUp").disabled   = swapRow <= 0;
     $("moveDown").disabled = swapRow < 0 || swapRow >= rows - 1;
 
@@ -812,6 +864,7 @@
       if(typeof d.hintsLeft !== "number") d.hintsLeft = MAX_HINTS;
       if(typeof d.swapLeft  !== "number") d.swapLeft  = (lv === "hard" ? MAX_SWAPS : 0);
       if(typeof d.maxRows   !== "number") d.maxRows   = MAX_ROWS;
+      if(typeof d.zapLeft   !== "number") d.zapLeft   = MAX_ZAPS;
       swapMode = false; swapRow = -1;
       if(d.lost){                          // خسر ولم يُعد المرحلة بعد
         LV = lv; S = d; sel = -1; clearTip();
@@ -838,6 +891,7 @@
   $("btnAdd").addEventListener("click", addNumbers);
   $("btnUndo").addEventListener("click", undoMove);
   $("btnSwap").addEventListener("click", toggleSwap);
+  $("btnZap").addEventListener("click", zapAll);
   $("moveUp").addEventListener("click", ()=> moveRow(-1));
   $("moveDown").addEventListener("click", ()=> moveRow(1));
   $("moveDone").addEventListener("click", ()=>{ endMove(); checkEnd(); });
@@ -858,7 +912,7 @@
     const last = store.get("arqam.level");
     if(last && LEVELS[last] && loadLevel(last)) return;
     LV = "easy";
-    S = { level:"easy", stage:1, score:0, swapLeft:0, maxRows:MAX_ROWS,
+    S = { level:"easy", stage:1, score:0, swapLeft:0, zapLeft:MAX_ZAPS, maxRows:MAX_ROWS,
           hintsLeft:MAX_HINTS, cells: genCells(START_ROWS, 1) };
     render();
     S = null;                 // لا تُحفظ لعبة قبل اختيار المستوى
